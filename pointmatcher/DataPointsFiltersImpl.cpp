@@ -1701,3 +1701,196 @@ void DataPointsFiltersImpl<T>::CutAtDescriptorThresholdDataPointsFilter::inPlace
 template struct DataPointsFiltersImpl<float>::CutAtDescriptorThresholdDataPointsFilter;
 template struct DataPointsFiltersImpl<double>::CutAtDescriptorThresholdDataPointsFilter;
 
+
+// InterestPointSamplingDataPointsFilter
+
+// Here we compare first voxel > second voxel
+// Empty voxels will always be considered less than a non-empty voxel.
+// If both contain points, we compare the dispersion ratio.
+template <typename T>
+bool greater_than_voxel (
+	const typename DataPointsFiltersImpl<T>::InterestPointSamplingDataPointsFilter::Voxel first,
+	const typename DataPointsFiltersImpl<T>::InterestPointSamplingDataPointsFilter::Voxel second)
+{
+	// First empty == second empty
+	if(first.pointIndices.empty() && second.pointIndices.empty()) return false;
+
+	// Non-empty voxels > Empty voxels
+	if(not first.pointIndices.empty() &&     second.pointIndices.empty()) return true;
+	if(    first.pointIndices.empty() && not second.pointIndices.empty()) return false;
+
+	// If they're both not empty, sort by the dispersion ratio
+	return first.dispersionRatio > second.dispersionRatio;
+}
+
+template <typename T>
+DataPointsFiltersImpl<T>::InterestPointSamplingDataPointsFilter::InterestPointSamplingDataPointsFilter() :
+	vSizeX(1),
+	vSizeY(1),
+	vSizeZ(1),
+	perc(1),
+	keepInteresting(true) {}
+
+template <typename T>
+DataPointsFiltersImpl<T>::InterestPointSamplingDataPointsFilter::InterestPointSamplingDataPointsFilter(const Parameters& params) :
+DataPointsFilter("InterestPointSamplingDataPointsFilter", InterestPointSamplingDataPointsFilter::availableParameters(), params),
+		vSizeX(Parametrizable::get<T>("vSizeX")),
+		vSizeY(Parametrizable::get<T>("vSizeY")),
+		vSizeZ(Parametrizable::get<T>("vSizeZ")),
+		perc(Parametrizable::get<T>("perc")),
+		keepInteresting(Parametrizable::get<bool>("keepInteresting"))
+{
+
+}
+
+template <typename T>
+typename PointMatcher<T>::DataPoints DataPointsFiltersImpl<T>::InterestPointSamplingDataPointsFilter::filter(const DataPoints& input)
+{
+    DataPoints output(input);
+	inPlaceFilter(output);
+	return output;
+}
+
+template <typename T>
+void DataPointsFiltersImpl<T>::InterestPointSamplingDataPointsFilter::inPlaceFilter(DataPoints& cloud)
+{
+
+	// Assert cloud contains a 3D point cloud
+	assert (cloud.features.rows() == 4);
+
+    const unsigned int numPoints(cloud.features.cols());
+
+	// TODO: Check that the voxel size is not too small, given the size of the data
+
+	// Calculate number of divisions along each axis
+	Vector minValues = cloud.features.rowwise().minCoeff();
+	Vector maxValues = cloud.features.rowwise().maxCoeff();
+
+    T minBoundX = minValues.x() / vSizeX;
+    T maxBoundX = maxValues.x() / vSizeX;
+    T minBoundY = minValues.y() / vSizeY;
+    T maxBoundY = maxValues.y() / vSizeY;
+    T minBoundZ = minValues.z() / vSizeZ;
+    T maxBoundZ = maxValues.z() / vSizeZ;
+
+    // number of divisions is total size / voxel size voxels of equal length + 1
+    // with remaining space
+    unsigned int numDivX = 1 + maxBoundX - minBoundX;
+    unsigned int numDivY = 1 + maxBoundY - minBoundY;;
+    unsigned int numDivZ = 1 + maxBoundZ - minBoundZ;
+
+
+    unsigned int numVox = numDivX * numDivY * numDivZ;
+
+    // Assume point cloud is randomly ordered
+    // compute a linear index of the following type
+    // i, j, k are the component indices
+    // nx, ny number of divisions in x and y components
+    // idx = i + j * nx + k * nx * ny
+    // std::vector<unsigned int> indices(numPoints);
+
+    // vector to hold the first point in a voxel
+    // this point will be ovewritten in the input cloud with
+    // the output value
+
+    std::vector<Voxel>* voxels;
+
+    // try allocating vector. If too big return error
+    try {
+    	voxels = new std::vector<Voxel>(numVox);
+    } catch (std::bad_alloc&) {
+    	throw InvalidParameter((boost::format("InterestPointSamplingDataPointsFilter: Memory allocation error with %1% voxels.  Try increasing the voxel dimensions.") % numVox).str());
+    }
+
+
+    for (unsigned int p = 0; p < numPoints; p++ )
+    {
+        unsigned int i = floor(cloud.features(0,p)/vSizeX - minBoundX);
+        unsigned int j = floor(cloud.features(1,p)/vSizeY - minBoundY);
+        unsigned int k = floor(cloud.features(2,p)/vSizeZ - minBoundZ);
+        unsigned int idx = i + j * numDivX + k * numDivX * numDivY; // Vox index
+
+        Vector3 point = cloud.features.col(p).head(3);
+
+		(*voxels)[idx].sumOuterProd += point * point.transpose();
+		(*voxels)[idx].sumPoints += point;
+		(*voxels)[idx].pointIndices.push_back(p);
+
+        // indices[p] = idx;
+
+    }
+
+    // Now iterate through voxes computing dispersion ratio
+
+    // NOTE: maybe it's better to use adjoint matrix to get the eigenvalues, using something from the code snipped below?
+    //    Matrix3 centered = mat.topRows(3).colwise() - mat.topRows(3).rowwise().mean();
+	//    Matrix3 cov = centered.adjoint() * centered;
+	//    Eigen::SelfAdjointEigenSolver<Matrix3> eig(cov);
+
+    for(unsigned int idx = 0; idx < numVox; idx++)
+    {
+        unsigned int numPointsInVox = (*voxels)[idx].pointIndices.size();
+        if(numPointsInVox > 0)
+        {
+        	// Compute the covariance matrix of the voxel
+        	// TODO: Is this prone to subject cancelation when using floats? Maybe this and the covariance values should always be double?
+        	Matrix3 cov = ((*voxels)[idx].sumOuterProd / (T)numPointsInVox) - ((*voxels)[idx].sumPoints/(T)numPointsInVox)*((*voxels)[idx].sumPoints/(T)numPointsInVox).transpose();
+
+        	// Solve to get eigenvalues and eigenvectors
+        	Eigen::EigenSolver<Matrix3> eig(cov);
+
+        	// Get min and max eigenvalues
+        	T minEigValue = eig.eigenvalues().real().minCoeff(), maxEigValue = eig.eigenvalues().real().maxCoeff();
+
+        	// Compute the dispersion ration
+        	(*voxels)[idx].dispersionRatio = maxEigValue/minEigValue;
+
+        }
+    }
+
+    // Sort voxes by decreasing dispersionRatio (empty voxels will be at the end)
+    std::sort((*voxels).begin(), (*voxels).end(), greater_than_voxel<T>);
+
+    // Gather all points to keep
+    std::vector<unsigned int> pointsToKeep;
+    if(keepInteresting)
+    {
+    	for(unsigned int idx = 0; idx < numVox; idx++)
+    	{
+			std::copy ((*voxels)[idx].pointIndices.begin(),(*voxels)[idx].pointIndices.end(),back_inserter(pointsToKeep));
+			if( ((T)pointsToKeep.size() / (T)numPoints) >= perc ) break;
+    	}
+    }
+    else
+    {
+		for(unsigned int idx = 0; idx < numVox; idx++)
+    	{
+			std::copy ((*voxels)[(numVox-1)-idx].pointIndices.begin(),(*voxels)[(numVox-1)-idx].pointIndices.end(),back_inserter(pointsToKeep));
+			if( ((T)pointsToKeep.size() / (T)numPoints) >= 1 - perc ) break;
+    	}
+    }
+
+    // deallocate memory for voxels information
+    delete voxels;
+
+    // Move the points to be kept to the start
+    // Bring the data we keep to the front of the arrays then
+	// wipe the leftover unused space.
+	std::sort(pointsToKeep.begin(), pointsToKeep.end());
+	int numPtsOut = pointsToKeep.size();
+	for (int i = 0; i < numPtsOut; i++){
+		int k = pointsToKeep[i];
+		assert(i <= k);
+		cloud.features.col(i) = cloud.features.col(k);
+		if (cloud.descriptors.rows() != 0)
+			cloud.descriptors.col(i) = cloud.descriptors.col(k);
+	}
+	cloud.features.conservativeResize(Eigen::NoChange, numPtsOut);
+
+	if (cloud.descriptors.rows() != 0)
+		cloud.descriptors.conservativeResize(Eigen::NoChange, numPtsOut);
+
+}
+
+template struct DataPointsFiltersImpl<float>::InterestPointSamplingDataPointsFilter;
+template struct DataPointsFiltersImpl<double>::InterestPointSamplingDataPointsFilter;

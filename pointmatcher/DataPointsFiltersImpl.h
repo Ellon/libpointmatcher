@@ -616,6 +616,72 @@ struct DataPointsFiltersImpl
 		virtual void inPlaceFilter(DataPoints& cloud);
 	};
 
+	//! Subsampling. Eeduces the size of a 3D point cloud by selecting Interest Points.
+	struct InterestPointSamplingDataPointsFilter: public DataPointsFilter
+	{
+    	// Type definitions
+		typedef PointMatcher<T> PM;
+		typedef typename PM::DataPoints DataPoints;
+		typedef typename PM::DataPointsFilter DataPointsFilter;
+
+		typedef PointMatcherSupport::Parametrizable Parametrizable;
+		typedef PointMatcherSupport::Parametrizable P;
+		typedef Parametrizable::Parameters Parameters;
+		typedef Parametrizable::ParameterDoc ParameterDoc;
+		typedef Parametrizable::ParametersDoc ParametersDoc;
+		typedef Parametrizable::InvalidParameter InvalidParameter;
+
+		typedef typename PointMatcher<T>::Matrix Matrix;
+		typedef typename Eigen::Matrix<T,3,3> Matrix3;
+		typedef typename PointMatcher<T>::Vector Vector;
+		typedef typename Eigen::Matrix<T,2,1> Vector2;
+		typedef typename Eigen::Matrix<T,3,1> Vector3;
+		typedef typename PointMatcher<T>::DataPoints::InvalidField InvalidField;
+
+    	// Destr
+		virtual ~InterestPointSamplingDataPointsFilter() {};
+
+		inline static const std::string description()
+		{
+			return "Subsampling. This filter reduces the size of a 3D point cloud by selecting Interest Points. Based on \\cite{Panwar2011Thesis}";
+		}
+
+		inline static const ParametersDoc availableParameters()
+		{
+			return boost::assign::list_of<ParameterDoc>
+			( "vSizeX", "Dimension of each voxel cell in x direction", "1.0", "-inf", "inf", &P::Comp<T> )
+			( "vSizeY", "Dimension of each voxel cell in y direction", "1.0", "-inf", "inf", &P::Comp<T> )
+			( "vSizeZ", "Dimension of each voxel cell in z direction", "1.0", "-inf", "inf", &P::Comp<T> )
+			( "perc",   "Percentage of the cloud to be considered as interesting points",  "0.1",  "0.0", "1.0", &P::Comp<T> )
+			( "keepInteresting", "If 1 (true), we keep the interesting points. If false (0), we keep the non-interesting points", "1", "0", "1", P::Comp<bool> )
+			;
+		}
+
+		const T vSizeX;
+		const T vSizeY;
+		const T vSizeZ;
+		const T perc;
+		const bool keepInteresting;
+
+		struct Voxel {
+			std::vector<unsigned int> pointIndices;
+			T dispersionRatio;
+			Matrix3 sumOuterProd;
+			Vector3 sumPoints;
+
+			Voxel() : dispersionRatio(0), sumOuterProd(Matrix3::Zero()), sumPoints(Vector3::Zero()) {}
+		};
+
+		//Constructor, uses parameter interface
+		InterestPointSamplingDataPointsFilter(const Parameters& params = Parameters());
+
+		InterestPointSamplingDataPointsFilter();
+
+		virtual DataPoints filter(const DataPoints& input);
+		virtual void inPlaceFilter(DataPoints& cloud);
+
+	};
+
 }; // DataPointsFiltersImpl
 
 #endif // __POINTMATCHER_DATAPOINTSFILTERS_H

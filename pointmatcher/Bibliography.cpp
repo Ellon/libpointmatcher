@@ -164,6 +164,27 @@ namespace PointMatcherSupport
 				( "doi", "" )
 				( "fulltext", "")
 			))
+			// ( "Panwar2012InterestPointSampling", makeMap(map_list_of
+			// 	( "type", "inproceedings" )
+			// 	( "title", "Interest Point Sampling for Range Data Registration in Visual Odometry" )
+			// 	( "author", "V. Panwar, J. Lam, P. Jasiobedzki, M. Greenspan" )
+			// 	( "booktitle", "International Symposium on Artificial Intelligence, Robotics and Automation in Space, 2012. (i-SAIRAS 2012)." )
+			// 	( "year", "2012" )
+			// 	( "pages", "" )
+			// 	( "publisher", "" )
+			// 	( "doi", "" )
+			// 	( "fulltext", "http://robotics.estec.esa.int/i-SAIRAS/isairas2012/Papers/Session%209A/09A_04_panwar.pdf")
+			// ))
+			( "Panwar2011Thesis", makeMap(map_list_of
+				( "type", "phdthesis" )
+				( "title", "Interest Point Sampling for Range Data Registration in Visual Odometry" )
+				( "author", "V. Panwar" )
+				( "booktitle", "PhD Thesis" )
+				( "year", "2011" )
+				( "school", "Queen's University, Kingston, Ontario, Canada" )
+				( "doi", "" )
+				( "fulltext", "http://hdl.handle.net/1974/6858")
+			))
 		;
 	}
 	
