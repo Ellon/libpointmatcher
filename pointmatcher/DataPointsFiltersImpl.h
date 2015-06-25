@@ -64,9 +64,9 @@ struct DataPointsFiltersImpl
 		
 		//inline static const ParametersDoc availableParameters()
 		//{
-		//	return ParametersDoc({
+		//	return boost::assign::list_of<ParameterDoc>
 		//		( "param1", "Description of the parameter", "defaultValue", "minValue", "maxValue", type of the parameter )
-		//		) "param2", "Description of the parameter", "defaultValue", "minValue", "maxValue", type of the parameter )
+		//		( "param2", "Description of the parameter", "defaultValue", "minValue", "maxValue", type of the parameter )
 		//	;
 		//}
 		//! Constructor, uses parameter interface
