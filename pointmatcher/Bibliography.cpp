@@ -47,14 +47,14 @@ namespace PointMatcherSupport
 {
 	using namespace std;
 	using boost::assign::map_list_of;
-	
+
 	template<typename M>
 	bool contains(const M& m, const typename M::key_type& k)
 	{
 		BOOST_AUTO(it,m.find(k));
 		return (it!=m.end());
 	}
-	
+
 	template<typename M>
 	const typename M::mapped_type& get(const M& m, const typename M::key_type& k)
 	{
@@ -72,7 +72,7 @@ namespace PointMatcherSupport
 		StringMap m = mapInitializer;
 		return m;
 	}
-	
+
 	static Bibliography bibliography()
 	{
 		return map_list_of<std::string, StringMap>
@@ -187,11 +187,11 @@ namespace PointMatcherSupport
 			))
 		;
 	}
-	
+
 	CurrentBibliography::CurrentBibliography(Mode mode):
 		mode(mode)
 	{}
-	
+
 	void CurrentBibliography::dump(std::ostream& os) const
 	{
 		switch (mode)
@@ -202,7 +202,7 @@ namespace PointMatcherSupport
 			default: assert(false); break;
 		};
 	}
-	
+
 	void CurrentBibliography::dumpText(std::ostream& os) const
 	{
 		Bibliography biblio(bibliography());
@@ -212,7 +212,7 @@ namespace PointMatcherSupport
 			if (!contains(biblio, entryName))
 				throw runtime_error(string("Broken bibliography, missing entry " + entryName));
 			const StringMap& entry(get(biblio, entryName));
-			
+
 			os << "[" << i+1 << "]";
 			if (contains(entry, "title"))
 				os << " " << get(entry, "title") << ".";
@@ -239,7 +239,7 @@ namespace PointMatcherSupport
 			if (!contains(biblio, entryName))
 				throw runtime_error(string("Broken bibliography, missing entry " + entryName));
 			const StringMap& entry(get(biblio, entryName));
-			
+
 			os << " * " << "<<Anchor(" << entryName << ")>>[" << i+1 << "] -";
 			if (contains(entry, "title"))
 				os << " '''" << get(entry, "title") << ".'''";
@@ -270,7 +270,7 @@ namespace PointMatcherSupport
 			if (!contains(biblio, entryName))
 				throw runtime_error(string("Broken bibliography, missing entry " + entryName));
 			const StringMap& entry(get(biblio, entryName));
-			
+
 			os << "@" << get(entry, "type") << "{" << entryName << endl;
 			if (contains(entry, "title"))
 				os << "\ttitle={" << get(entry, "title") << "}," << endl;
@@ -287,7 +287,7 @@ namespace PointMatcherSupport
 			os << "}" << endl << endl;
 		}
 	}
-	
+
 	static StringVector splitString(const string& text, char delim)
 	{
 		StringVector res;
@@ -306,13 +306,13 @@ namespace PointMatcherSupport
 		}
 		return res;
 	}
-	
+
 	std::string getAndReplaceBibEntries(const std::string& text, CurrentBibliography& curBib)
 	{
 		CurrentBibliography::Mode mode(curBib.mode);
 		BibIndices& indices(curBib.indices);
 		StringVector& entries(curBib.entries);
-		
+
 		string newText;
 		const StringVector words(splitString(text, ' '));
 		for (size_t i = 0; i < words.size(); ++i)

@@ -606,7 +606,7 @@ typename PointMatcher<T>::Vector DataPointsFiltersImpl<T>::SurfaceNormalDataPoin
 	Vector output(eigenVeDim*eigenVeDim);
 	for(int k=0; k < eigenVe.cols(); k++)
 	{
-		output.segment(k*eigenVeDim, eigenVeDim) = 
+		output.segment(k*eigenVeDim, eigenVeDim) =
 			eigenVe.row(k).transpose();
 	}
 
@@ -1625,7 +1625,7 @@ void DataPointsFiltersImpl<T>::VoxelGridDataPointsFilter::inPlaceFilter(DataPoin
 			cloud.descriptors.col(i) = cloud.descriptors.col(k);
 	}
 	cloud.features.conservativeResize(Eigen::NoChange, numPtsOut);
-	
+
 	if (cloud.descriptors.rows() != 0)
 		cloud.descriptors.conservativeResize(Eigen::NoChange, numPtsOut);
 }
