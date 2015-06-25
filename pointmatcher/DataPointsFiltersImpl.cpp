@@ -1894,3 +1894,32 @@ void DataPointsFiltersImpl<T>::InterestPointSamplingDataPointsFilter::inPlaceFil
 
 template struct DataPointsFiltersImpl<float>::InterestPointSamplingDataPointsFilter;
 template struct DataPointsFiltersImpl<double>::InterestPointSamplingDataPointsFilter;
+
+// SegmentGroundDataPointsFilter
+// Constructor
+template<typename T>
+DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::SegmentGroundDataPointsFilter(const Parameters& params):
+	DataPointsFilter("SegmentGroundDataPointsFilter", SegmentGroundDataPointsFilter::availableParameters(), params)//,
+	// dim(Parametrizable::get<unsigned>("dim")),
+	// maxDist(Parametrizable::get<T>("maxDist"))
+{
+}
+
+template<typename T>
+typename PointMatcher<T>::DataPoints DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::filter(
+	const DataPoints& input)
+{
+	DataPoints output(input);
+	inPlaceFilter(output);
+	return output;
+}
+
+// In-place filter
+template<typename T>
+void DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::inPlaceFilter(
+	DataPoints& cloud)
+{
+}
+
+template struct DataPointsFiltersImpl<float>::SegmentGroundDataPointsFilter;
+template struct DataPointsFiltersImpl<double>::SegmentGroundDataPointsFilter;

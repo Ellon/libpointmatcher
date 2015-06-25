@@ -682,6 +682,36 @@ struct DataPointsFiltersImpl
 
 	};
 
+	struct SegmentGroundDataPointsFilter: public DataPointsFilter
+	{
+		inline static const std::string description()
+		{
+			return "Gaussian process ground segmentation of sparse point clouds, like the ones acquired from Velodyne sensors. Based on \\cite{Douillard2011LidarSegmentation}";
+		}
+
+		inline static const ParametersDoc availableParameters()
+		{
+			return boost::assign::list_of<ParameterDoc>
+				( "seedRadius", "XY radius of the cylindric region used as seed for GP-INSAC", "3.0", "0", "inf", &P::Comp<T> )
+				( "seedBase", "Z base height of the cylindric region used as seed for GP-INSAC", "-0.7", "-inf", "inf", &P::Comp<T> )
+				( "gpLengthScale", "Length scale for the squared exponential covariance kernel of the Gaussian Process", "14.0", "0.0", "inf", &P::Comp<T> )
+				( "gpSignalVar", "Signal variance for the squared exponential covariance kernel of the Gaussian Process", "0.88", "0.0", "inf", &P::Comp<T> )
+				( "gpNoiseVar", "Noise variance for the squared exponential covariance kernel of the Gaussian Process", "0.06", "0.0", "inf", &P::Comp<T> )
+				( "zGroundVar", "Expected variance of the Z component of the ground points", "0.003", "0.0", "inf", &P::Comp<T> )
+				( "thModel", "Threshold on the model to decide if we proceed with the in/outlier determination", "0.2", "0.0", "inf", &P::Comp<T> )
+				( "thData", "Threshold on how close to the model a test point should be to be considered inlier. Value in standard deviations.", "3", "0.0", "inf", &P::Comp<T> )
+				( "keepGround", "If 1 (true), we keep the points segmented as ground (aka inliers to the model). If false (0), we remove the ground points", "0", "0", "1", P::Comp<bool> )
+				( "keepObjects", "If 1 (true), we keep the points segmented as objects (aka outliers to the model). If false (0), we remove the object points", "1", "0", "1", P::Comp<bool> )
+				( "keepUnknown", "If 1 (true), we keep the points which the model was not certain about (aka cannot be classified as in/outliers). If false (0), we remove these points", "0", "0", "1", P::Comp<bool> )
+			;
+		}
+		//! Constructor, uses parameter interface
+		SegmentGroundDataPointsFilter(const Parameters& params = Parameters());
+
+		virtual DataPoints filter(const DataPoints& input);
+		virtual void inPlaceFilter(DataPoints& cloud);
+	};
+
 }; // DataPointsFiltersImpl
 
 #endif // __POINTMATCHER_DATAPOINTSFILTERS_H

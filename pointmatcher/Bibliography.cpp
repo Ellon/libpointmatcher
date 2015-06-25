@@ -185,6 +185,17 @@ namespace PointMatcherSupport
 				( "doi", "" )
 				( "fulltext", "http://hdl.handle.net/1974/6858")
 			))
+			( "Douillard2011LidarSegmentation", makeMap(map_list_of
+				( "type", "inproceedings" )
+				( "title", "On the Segmentation of 3D LIDAR Point Clouds" )
+				( "author", "B. Douillard, J. Underwood, N. Kuntz, V. Vlaskine, A. Quadros, P. Morton, A. Frenkel" )
+				( "booktitle", " International Conference on Robotics and Automation, 2011. (ICRA 2011). Proceedings of the IEEE" )
+				( "year", "2011" )
+				( "pages", "2798--2805" )
+				( "publisher", "IEEE Press" )
+				( "doi", "" )
+				( "fulltext", "")
+			))
 		;
 	}
 
