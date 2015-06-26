@@ -1899,9 +1899,18 @@ template struct DataPointsFiltersImpl<double>::InterestPointSamplingDataPointsFi
 // Constructor
 template<typename T>
 DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::SegmentGroundDataPointsFilter(const Parameters& params):
-	DataPointsFilter("SegmentGroundDataPointsFilter", SegmentGroundDataPointsFilter::availableParameters(), params)//,
-	// dim(Parametrizable::get<unsigned>("dim")),
-	// maxDist(Parametrizable::get<T>("maxDist"))
+	DataPointsFilter("SegmentGroundDataPointsFilter", SegmentGroundDataPointsFilter::availableParameters(), params),
+		seedRadius    (Parametrizable::get<T>   ("seedRadius")),
+		seedBase      (Parametrizable::get<T>   ("seedBase")),
+		gpLengthScale (Parametrizable::get<T>   ("gpLengthScale")),
+		gpSignalVar   (Parametrizable::get<T>   ("gpSignalVar")),
+		gpNoiseVar    (Parametrizable::get<T>   ("gpNoiseVar")),
+		zGroundVar    (Parametrizable::get<T>   ("zGroundVar")),
+		thModel       (Parametrizable::get<T>   ("thModel")),
+		thData        (Parametrizable::get<T>   ("thData")),
+		keepGround    (Parametrizable::get<bool>("keepGround")),
+		keepObjects   (Parametrizable::get<bool>("keepObjects")),
+		keepUnknown   (Parametrizable::get<bool>("keepUnknown"))
 {
 }
 
@@ -1919,7 +1928,208 @@ template<typename T>
 void DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::inPlaceFilter(
 	DataPoints& cloud)
 {
+	const unsigned int numPoints(cloud.features.cols());
+
+	// Get seed points (they'll be the first inliers) and put them in the begining of the cloud
+	unsigned int seed_offset = 0;
+	for (unsigned int curr_offset = 0; curr_offset < numPoints; curr_offset++ )
+	{
+		if( cloud.features.col(curr_offset)(2) <= seedBase &&
+		    cloud.features.col(curr_offset).head(2).norm() <= seedRadius )
+		{
+			if(curr_offset != seed_offset)
+			{
+				// swap curr_offset and seed_offset
+				cloud.features.col(curr_offset).swap(cloud.features.col(seed_offset));
+				// swap descriptors if any
+				if (cloud.descriptors.rows() != 0)
+					cloud.descriptors.col(curr_offset).swap(cloud.descriptors.col(seed_offset));
+			}
+			seed_offset++;
+		}
+	}
+
+	// Main loop of gp-insac
+	unsigned int inliers_size = 0;
+	unsigned int new_inliers_size = seed_offset;
+	unsigned int outliers_offset, outliers_size, unknowns_offset, unknowns_size;
+	while(new_inliers_size > 0)
+	{
+		// DEBUG
+		cout << "new_inliers_size = " << new_inliers_size << endl;
+
+		// 1) Generate the current model from current inliers
+		inliers_size += new_inliers_size;
+		Matrix K(inliers_size,inliers_size); K << createKernel(cloud.features.block(0,0,2,inliers_size), cloud.features.block(0,0,2,inliers_size));
+
+		// 2) Get the estimated mean and variance for the test points
+		unsigned int test_size = cloud.features.cols() - inliers_size;
+		// use cholesky to get Linv of (K + gpNoiseVar*I)
+		Matrix L( (K + gpNoiseVar*Matrix::Identity(inliers_size,inliers_size)).llt().matrixL() );
+		Matrix Linv( L.inverse() );
+		// compute the estimated mean values for the test points
+		Matrix Kstar(inliers_size,test_size); Kstar << createKernel(cloud.features.block(0,0,2,inliers_size),cloud.features.block(0,inliers_size,2,test_size));
+		Vector fstar(test_size); fstar << Kstar.transpose() * (Linv.transpose() * (Linv * cloud.features.row(2).segment(inliers_size,test_size).transpose()));
+		// compute the estimated variance for the test points
+		Matrix v(Linv * Kstar);
+		Matrix Kstar2(test_size,test_size); Kstar2 << createKernel(cloud.features.block(0,inliers_size,2,test_size),cloud.features.block(0,inliers_size,2,test_size));
+		Vector Vstar((Kstar2 - v.transpose() * v).diagonal());
+
+		// 3) Classify the test points into inliers, outliers or unknown
+		// At this point the all the inliers will be at the begining of the cloud
+		// and we consider all test points unknown. Then we sort the cloud putting
+		// the new inliers together with the old inliers, and the outliers at the
+		// end of the cloud. So, what we're doing here is going from:
+		//
+        // ,- inliers_offset (always zero)
+		// |                   ,- unknowns_offset(=inliers_size)          ,- outliers_offset(=inliers_size+test_size)
+ 		// v                   v                                          v
+		// ---------------------------------------------------------------
+		// |      inliers     |         unknowns (=test points)          |
+		// ---------------------------------------------------------------
+		//                                                                ^- outliers_size(=0)
+		//                     ^--------unknowns_size(=test_size)--------^
+		//                     ^-new_inliers_size(=0)
+		// ^---inliers_size---^
+		//
+		// to:
+		//
+		// ,- inliers_offset (always zero)
+		// |                       ,- unknowns_offset    ,- outliers_offset
+ 		// v                       v                     v
+		// ---------------------------------------------------------------
+		// |      inliers     !   |       unknowns      |    outliers    |
+		// ---------------------------------------------------------------
+		//                                               ^-outliers_size-^
+		//                         ^----unknowns_size---^
+		//                     ^--^
+		//                       `new_inliers_size
+		// ^---inliers_size-- ^
+
+		// reset class pointers and counters
+		// inliers_offset is always zero.
+		new_inliers_size = 0;
+		unknowns_offset = inliers_size;
+		unknowns_size = test_size;
+		outliers_offset = inliers_size + unknowns_size;
+		outliers_size = 0;
+		unsigned i = 0;
+		while(i < outliers_offset - inliers_size)
+		{
+			if(sqrt(Vstar(i)) < thModel)
+			{
+				double mahal_dist = (cloud.features.row(2).segment(inliers_size,test_size)(i) - fstar(i))/sqrt(zGroundVar + Vstar(i));
+				if(mahal_dist < thData)
+				{
+					if(new_inliers_size != i)
+					{
+						// swap features
+						cloud.features.col(inliers_size + new_inliers_size).swap(cloud.features.col(inliers_size + i));
+						// swap descriptors if any
+						if (cloud.descriptors.rows() != 0)
+							cloud.descriptors.col(inliers_size + new_inliers_size).swap(cloud.descriptors.col(inliers_size + i));
+					}
+					// adjust pointers and counters
+					new_inliers_size++;
+					unknowns_offset++;
+					unknowns_size--;
+					i++;
+				}
+				else
+				{
+					// point is obstacle; add to outliers
+					outliers_offset--;
+					if(inliers_size + i != outliers_offset)
+					{
+						// swap features
+						cloud.features.col(inliers_size + i).swap(cloud.features.col(outliers_offset));
+						// swap descriptors if any
+						if (cloud.descriptors.rows() != 0)
+							cloud.descriptors.col(inliers_size + i).swap(cloud.descriptors.col(outliers_offset));
+					}
+					outliers_size++;
+					unknowns_size--;
+				}
+			}
+			else
+			{
+				// Point is unknown; just advance to next point
+				i++;
+			}
+		}
+	}
+
+	// DEBUG: Save point clouds of each class
+	if(inliers_size > 0)
+	{
+		DataPoints ground_cloud(cloud.features.block(0,0,cloud.features.rows(),inliers_size), cloud.featureLabels);
+		ground_cloud.save("ground.pcd");
+	}
+
+	if(outliers_size > 0)
+	{
+		DataPoints object_cloud(cloud.features.block(0,outliers_offset,cloud.features.rows(),outliers_size), cloud.featureLabels);
+		object_cloud.save("object.pcd");
+	}
+
+	if(unknowns_size > 0)
+	{
+		DataPoints unknown_cloud(cloud.features.block(0,unknowns_offset,cloud.features.rows(),unknowns_size), cloud.featureLabels);
+		unknown_cloud.save("unknown.pcd");
+	}
+
+	// Crop the point cloud based on the flags keepGround, keepObjects and keepUnknown
+	unsigned int curr_offset = 0;
+	if(keepGround)
+	{
+		// All ground points should be already at the begining of the cloud. Just adjust curr_offset
+		curr_offset += inliers_size;
+	}
+	if(keepUnknown)
+	{
+		if(unknowns_size != 0 && curr_offset != unknowns_offset)
+		{
+			cloud.features.block(0,curr_offset,cloud.features.rows(),unknowns_size) = cloud.features.block(0,unknowns_offset,cloud.features.rows(),unknowns_size);
+			if (cloud.descriptors.rows() != 0)
+				cloud.descriptors.block(0,curr_offset,cloud.descriptors.rows(),unknowns_size) = cloud.descriptors.block(0,unknowns_offset,cloud.descriptors.rows(),unknowns_size);
+		}
+		curr_offset += unknowns_size;
+	}
+	if(keepObjects)
+	{
+		if(outliers_size != 0 && curr_offset != outliers_offset)
+		{
+			cloud.features.block(0,curr_offset,cloud.features.rows(),outliers_size) = cloud.features.block(0,outliers_offset,cloud.features.rows(),outliers_size);
+			if (cloud.descriptors.rows() != 0)
+				cloud.descriptors.block(0,curr_offset,cloud.descriptors.rows(),outliers_size) = cloud.descriptors.block(0,outliers_offset,cloud.descriptors.rows(),outliers_size);
+		}
+		curr_offset += outliers_size;
+	}
+
+	cloud.features.conservativeResize(Eigen::NoChange, curr_offset);
+	if (cloud.descriptors.rows() != 0)
+		cloud.descriptors.conservativeResize(Eigen::NoChange, curr_offset);
+
 }
+
+template<typename T>
+typename DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::Matrix
+DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::createKernel(
+	const Matrix & Xp, const Matrix & Xq)
+{
+	Matrix K(Xp.cols(), Xq.cols());
+	Matrix aux(Xq.rows(),Xq.cols());
+	for (unsigned int i = 0; i < Xp.cols(); i++)
+	{
+		aux = -Xq;
+		aux.colwise() += Xp.col(i);
+		aux *= 1/gpLengthScale;
+		K.row(i) = gpSignalVar*Eigen::exp(-(1/2)*(aux.row(1).array().pow(2) + aux.row(2).array().pow(2)));
+	}
+
+	return K;
+}
+
 
 template struct DataPointsFiltersImpl<float>::SegmentGroundDataPointsFilter;
 template struct DataPointsFiltersImpl<double>::SegmentGroundDataPointsFilter;

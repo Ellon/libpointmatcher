@@ -684,6 +684,9 @@ struct DataPointsFiltersImpl
 
 	struct SegmentGroundDataPointsFilter: public DataPointsFilter
 	{
+		typedef typename PointMatcher<T>::Matrix Matrix;
+		typedef typename PointMatcher<T>::Vector Vector;
+
 		inline static const std::string description()
 		{
 			return "Gaussian process ground segmentation of sparse point clouds, like the ones acquired from Velodyne sensors. Based on \\cite{Douillard2011LidarSegmentation}";
@@ -705,11 +708,27 @@ struct DataPointsFiltersImpl
 				( "keepUnknown", "If 1 (true), we keep the points which the model was not certain about (aka cannot be classified as in/outliers). If false (0), we remove these points", "0", "0", "1", P::Comp<bool> )
 			;
 		}
+
+		const T seedRadius;
+		const T seedBase;
+		const T gpLengthScale;
+		const T gpSignalVar;
+		const T gpNoiseVar;
+		const T zGroundVar;
+		const T thModel;
+		const T thData;
+		const bool keepGround;
+		const bool keepObjects;
+		const bool keepUnknown;
+
 		//! Constructor, uses parameter interface
 		SegmentGroundDataPointsFilter(const Parameters& params = Parameters());
 
 		virtual DataPoints filter(const DataPoints& input);
 		virtual void inPlaceFilter(DataPoints& cloud);
+
+	private:
+		Matrix createKernel(const Matrix & Xp, const Matrix & Xq);
 	};
 
 }; // DataPointsFiltersImpl
