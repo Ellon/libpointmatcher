@@ -1960,20 +1960,34 @@ void DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::inPlaceFilter(
 
 		// 1) Generate the current model from current inliers
 		inliers_size += new_inliers_size;
-		Matrix K(inliers_size,inliers_size); K << createKernel(cloud.features.block(0,0,2,inliers_size), cloud.features.block(0,0,2,inliers_size));
+		// TODO: Implement a "updateKernel" function
+		Matrix K( createKernel(cloud.features.block(0,0,2,inliers_size), cloud.features.block(0,0,2,inliers_size)) );
+
+		// Special
+		// TODO: If it's the first loop, test the inliers against the model
+		// to remove possible obstacles too close to the robot, and update
+		// the kernel to remove these obstacle points
 
 		// 2) Get the estimated mean and variance for the test points
 		unsigned int test_size = cloud.features.cols() - inliers_size;
 		// use cholesky to get Linv of (K + gpNoiseVar*I)
 		Matrix L( (K + gpNoiseVar*Matrix::Identity(inliers_size,inliers_size)).llt().matrixL() );
 		Matrix Linv( L.inverse() );
+
+		// compute matrix alpha (targets = cloud.features.row(2) = z-values of point cloud)
+		Matrix alpha( Linv.transpose() * (Linv * cloud.features.row(2).segment(inliers_size,test_size).transpose()) );
+
+		// compute the kernel between inliners and test points
+		Matrix Kstar( createKernel(cloud.features.block(0,0,2,inliers_size),cloud.features.block(0,inliers_size,2,test_size)) );
+
 		// compute the estimated mean values for the test points
-		Matrix Kstar(inliers_size,test_size); Kstar << createKernel(cloud.features.block(0,0,2,inliers_size),cloud.features.block(0,inliers_size,2,test_size));
-		Vector fstar(test_size); fstar << Kstar.transpose() * (Linv.transpose() * (Linv * cloud.features.row(2).segment(inliers_size,test_size).transpose()));
+		Vector fstar( Kstar.transpose() * alpha );
+
 		// compute the estimated variance for the test points
+		// TODO: simplify the computation here since we only need the diagonal of V
 		Matrix v(Linv * Kstar);
-		Matrix Kstar2(test_size,test_size); Kstar2 << createKernel(cloud.features.block(0,inliers_size,2,test_size),cloud.features.block(0,inliers_size,2,test_size));
-		Vector Vstar((Kstar2 - v.transpose() * v).diagonal());
+		Matrix Kstar2( createKernel(cloud.features.block(0,inliers_size,2,test_size),cloud.features.block(0,inliers_size,2,test_size)) );
+		Vector Vstar((Kstar2 - (v.transpose() * v)).diagonal());
 
 		// 3) Classify the test points into inliers, outliers or unknown
 		// At this point the all the inliers will be at the begining of the cloud
@@ -2118,13 +2132,11 @@ DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::createKernel(
 	const Matrix & Xp, const Matrix & Xq)
 {
 	Matrix K(Xp.cols(), Xq.cols());
-	Matrix aux(Xq.rows(),Xq.cols());
+	Matrix scaled_colwise_diff(Xq.rows(),Xq.cols());
 	for (unsigned int i = 0; i < Xp.cols(); i++)
 	{
-		aux = -Xq;
-		aux.colwise() += Xp.col(i);
-		aux *= 1/gpLengthScale;
-		K.row(i) = gpSignalVar*Eigen::exp(-(1/2)*(aux.row(1).array().pow(2) + aux.row(2).array().pow(2)));
+		scaled_colwise_diff = ((-Xq).colwise() + Xp.col(i))/gpLengthScale;
+		K.row(i) = gpSignalVar*Eigen::exp(-(1.0/2.0)*(scaled_colwise_diff.row(0).array().pow(2.0) + scaled_colwise_diff.row(1).array().pow(2.0)));
 	}
 
 	return K;
