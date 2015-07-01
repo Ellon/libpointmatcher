@@ -727,8 +727,6 @@ struct DataPointsFiltersImpl
 		virtual DataPoints filter(const DataPoints& input);
 		virtual void inPlaceFilter(DataPoints& cloud);
 
-	private:
-		Matrix createKernel(const Matrix & Xp, const Matrix & Xq);
 	};
 
 }; // DataPointsFiltersImpl

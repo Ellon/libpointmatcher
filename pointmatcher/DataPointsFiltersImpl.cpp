@@ -44,6 +44,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // Eigenvalues
 #include "Eigen/QR"
 
+#include "gp.h" // for gaussian process used by SegmentGroundDataPointsFilter, lives in contrib/libgp-pm
+
 using namespace std;
 using namespace PointMatcherSupport;
 
@@ -1949,60 +1951,51 @@ void DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::inPlaceFilter(
 		}
 	}
 
+	libgp::GaussianProcess gp(2, "CovSum ( CovSEiso, CovNoise)");
+	Eigen::VectorXd params(gp.covf().get_param_dim());
+	params << log(gpLengthScale), log(gpSignalVar), log(gpNoiseVar);
+	gp.covf().set_loghyper(params);
+
 	// Main loop of gp-insac
-	unsigned int inliers_size = 0;
-	unsigned int new_inliers_size = seed_offset;
-	unsigned int outliers_offset, outliers_size, unknowns_offset, unknowns_size;
+	// Define offsets and counters used in the main loop
+	// Values here are only to make the compiler happy
+	unsigned int inliers_size = 0,
+	             new_inliers_size = seed_offset,
+	             unknowns_offset = 0,
+	             unknowns_size = numPoints,
+				 outliers_offset = unknowns_size,
+	             outliers_size = 0;
 	while(new_inliers_size > 0)
 	{
 		// DEBUG
 		cout << "new_inliers_size = " << new_inliers_size << endl;
 
-		// 1) Generate the current model from current inliers
+		// 1) Add new inliers to the model
+		for(unsigned i = inliers_size; i < inliers_size + new_inliers_size; i++)
+		{
+			double x[] = {cloud.features.col(i)(0), cloud.features.col(i)(1)};
+			double y = cloud.features.col(i)(2);
+			gp.add_pattern(x, y);
+		}
+
+		// Update inliers_size
 		inliers_size += new_inliers_size;
-		// TODO: Implement a "updateKernel" function
-		Matrix K( createKernel(cloud.features.block(0,0,2,inliers_size), cloud.features.block(0,0,2,inliers_size)) );
+		new_inliers_size = 0;
 
-		// Special
-		// TODO: If it's the first loop, test the inliers against the model
-		// to remove possible obstacles too close to the robot, and update
-		// the kernel to remove these obstacle points
-
-		// 2) Get the estimated mean and variance for the test points
-		unsigned int test_size = cloud.features.cols() - inliers_size;
-		// use cholesky to get Linv of (K + gpNoiseVar*I)
-		Matrix L( (K + gpNoiseVar*Matrix::Identity(inliers_size,inliers_size)).llt().matrixL() );
-		Matrix Linv( L.inverse() );
-
-		// compute matrix alpha (targets = cloud.features.row(2) = z-values of point cloud)
-		Matrix alpha( Linv.transpose() * (Linv * cloud.features.row(2).segment(inliers_size,test_size).transpose()) );
-
-		// compute the kernel between inliners and test points
-		Matrix Kstar( createKernel(cloud.features.block(0,0,2,inliers_size),cloud.features.block(0,inliers_size,2,test_size)) );
-
-		// compute the estimated mean values for the test points
-		Vector fstar( Kstar.transpose() * alpha );
-
-		// compute the estimated variance for the test points
-		// TODO: simplify the computation here since we only need the diagonal of V
-		Matrix v(Linv * Kstar);
-		Matrix Kstar2( createKernel(cloud.features.block(0,inliers_size,2,test_size),cloud.features.block(0,inliers_size,2,test_size)) );
-		Vector Vstar((Kstar2 - (v.transpose() * v)).diagonal());
-
-		// 3) Classify the test points into inliers, outliers or unknown
+		// 2) Classify the test points into inliers, outliers or unknown
 		// At this point the all the inliers will be at the begining of the cloud
 		// and we consider all test points unknown. Then we sort the cloud putting
 		// the new inliers together with the old inliers, and the outliers at the
 		// end of the cloud. So, what we're doing here is going from:
 		//
         // ,- inliers_offset (always zero)
-		// |                   ,- unknowns_offset(=inliers_size)          ,- outliers_offset(=inliers_size+test_size)
+		// |                   ,- unknowns_offset(=inliers_size)          ,- outliers_offset(=inliers_size+unknowns_size)
  		// v                   v                                          v
 		// ---------------------------------------------------------------
 		// |      inliers     |         unknowns (=test points)          |
 		// ---------------------------------------------------------------
 		//                                                                ^- outliers_size(=0)
-		//                     ^--------unknowns_size(=test_size)--------^
+		//                     ^-unknowns_size(=numPoints-inliers_size)--^
 		//                     ^-new_inliers_size(=0)
 		// ^---inliers_size---^
 		//
@@ -2022,17 +2015,21 @@ void DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::inPlaceFilter(
 
 		// reset class pointers and counters
 		// inliers_offset is always zero.
-		new_inliers_size = 0;
 		unknowns_offset = inliers_size;
-		unknowns_size = test_size;
+		unknowns_size = numPoints - inliers_size;
 		outliers_offset = inliers_size + unknowns_size;
 		outliers_size = 0;
 		unsigned i = 0;
 		while(i < outliers_offset - inliers_size)
 		{
-			if(sqrt(Vstar(i)) < thModel)
+			double x[] = {cloud.features.col(inliers_size + i)(0), cloud.features.col(inliers_size + i)(1)};
+			double y = cloud.features.col(inliers_size + i)(2);
+			double f = gp.f(x);
+			double v = gp.var(x);
+
+			if(sqrt(v) < thModel)
 			{
-				double mahal_dist = (cloud.features.row(2).segment(inliers_size,test_size)(i) - fstar(i))/sqrt(zGroundVar + Vstar(i));
+				double mahal_dist = (y - f)/sqrt((double)zGroundVar + v);
 				if(mahal_dist < thData)
 				{
 					if(new_inliers_size != i)
@@ -2063,6 +2060,8 @@ void DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::inPlaceFilter(
 					}
 					outliers_size++;
 					unknowns_size--;
+					// NOTE: we do not increment 'i' here since we want to test
+					//       the swaped point at the same index in the next loop
 				}
 			}
 			else
@@ -2125,23 +2124,6 @@ void DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::inPlaceFilter(
 		cloud.descriptors.conservativeResize(Eigen::NoChange, curr_offset);
 
 }
-
-template<typename T>
-typename DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::Matrix
-DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::createKernel(
-	const Matrix & Xp, const Matrix & Xq)
-{
-	Matrix K(Xp.cols(), Xq.cols());
-	Matrix scaled_colwise_diff(Xq.rows(),Xq.cols());
-	for (unsigned int i = 0; i < Xp.cols(); i++)
-	{
-		scaled_colwise_diff = ((-Xq).colwise() + Xp.col(i))/gpLengthScale;
-		K.row(i) = gpSignalVar*Eigen::exp(-(1.0/2.0)*(scaled_colwise_diff.row(0).array().pow(2.0) + scaled_colwise_diff.row(1).array().pow(2.0)));
-	}
-
-	return K;
-}
-
 
 template struct DataPointsFiltersImpl<float>::SegmentGroundDataPointsFilter;
 template struct DataPointsFiltersImpl<double>::SegmentGroundDataPointsFilter;
