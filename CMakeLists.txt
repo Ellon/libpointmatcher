@@ -99,6 +99,15 @@ set(EXTRA_DEPS "")
 # compile local version of gtest, yaml-cpp and libgp
 add_subdirectory(contrib)
 
+#--------------------
+# DEPENDENCY:  libgp
+#--------------------
+include_directories(contrib/libgp-pm/include)
+
+get_property(gp-pm_LIB TARGET gp-pm PROPERTY LOCATION)
+set (EXTERNAL_LIBS ${EXTERNAL_LIBS} ${gp-pm_LIB} )
+set (EXTRA_DEPS ${EXTRA_DEPS} gp-pm)
+set(gp_FOUND)
 
 #--------------------
 # DEPENDENCY:  boost
