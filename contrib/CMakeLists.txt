@@ -8,3 +8,6 @@ add_library(gtest gtest/gtest-all.cc)
 if(NOT USE_SYSTEM_YAML_CPP)
 add_subdirectory(yaml-cpp-pm)
 endif()
+
+# Wrapped libgp
+add_subdirectory(libgp-pm)

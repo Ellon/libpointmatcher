@@ -19,9 +19,9 @@ endif (NOT GREP_VERSION_RESULT EQUAL 0)
 string(REGEX REPLACE ".*\"(.*)\".*" "\\1" PROJECT_VERSION "${PROJECT_VERSION}" )
 
 # Check if 32 bit platform
-# By default, libpointmatcher is not compatible with and will not build on a 
+# By default, libpointmatcher is not compatible with and will not build on a
 # 32 bit system
-if( NOT CMAKE_SIZEOF_VOID_P EQUAL 8 ) 
+if( NOT CMAKE_SIZEOF_VOID_P EQUAL 8 )
     MESSAGE(SEND_ERROR "32 bits compiler detected. Libpointmatcher is only supported in 64 bits." )
     SET( EX_PLATFORM 32 )
     SET( EX_PLATFORM_NAME "x86" )
@@ -96,7 +96,7 @@ include(UseDoxygen)
 set(EXTERNAL_LIBS "")
 set(EXTRA_DEPS "")
 
-# compile local version of gtest and yaml-cpp
+# compile local version of gtest, yaml-cpp and libgp
 add_subdirectory(contrib)
 
 
@@ -119,7 +119,7 @@ find_path(EIGEN_INCLUDE_DIR Eigen/Core
 	/usr/include/eigen3
 )
 include_directories(${EIGEN_INCLUDE_DIR})
-#note: no library to add, eigen rely only on headers 
+#note: no library to add, eigen rely only on headers
 
 #TODO: this should be a more standard way
 #find_package(Eigen3 REQUIRED)
@@ -183,11 +183,11 @@ if(USE_SYSTEM_YAML_CPP)
     endif(yaml-cpp_INCLUDE_DIRS AND yaml-cpp_LIBRARIES)
 else(USE_SYSTEM_YAML_CPP)
         include_directories(contrib/yaml-cpp-pm/include)
-        
+
 #note: this is not working....
         #get_property(yaml-cpp-pm_INCLUDE TARGET yaml-cpp-pm PROPERTY INCLUDE_DIRECTORIES)
         #include_directories(${yaml-cpp-pm_INCLUDE})
-        
+
         get_property(yaml-cpp-pm_LIB TARGET yaml-cpp-pm PROPERTY LOCATION)
         set (EXTERNAL_LIBS ${EXTERNAL_LIBS} ${yaml-cpp-pm_LIB} )
         set (EXTRA_DEPS ${EXTRA_DEPS} yaml-cpp-pm)
@@ -306,11 +306,11 @@ add_subdirectory(utest)
 
 
 #=================== allow find_package() =========================
-# 
+#
 # the following case be used in an external project requiring libnabo:
 #  ...
-#  find_package(libpointmatcher) 
-#  include_directories(${libpointmatcher_INCLUDE_DIRS}) 
+#  find_package(libpointmatcher)
+#  include_directories(${libpointmatcher_INCLUDE_DIRS})
 #  target_link_libraries(executableName ${libpointmatcher_LIBRARIES})
 #  ...
 
@@ -354,7 +354,7 @@ configure_file(libpointmatcherConfig.cmake.in
 # The same versioning file can be used for both cases
 configure_file(libpointmatcherConfigVersion.cmake.in
   "${PROJECT_BINARY_DIR}/libpointmatcherConfigVersion.cmake" @ONLY)
- 
+
 
 # Install the libpointmatcherConfig.cmake and libpointmatcherConfigVersion.cmake
 install(FILES
