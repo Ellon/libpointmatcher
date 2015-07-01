@@ -40,8 +40,8 @@ endif()
 set(INSTALL_LIB_DIR lib${LIBSUFFIX} CACHE PATH
     "Installation directory for libraries")
 mark_as_advanced(INSTALL_LIB_DIR)
-configure_file(${CMAKE_SOURCE_DIR}/contrib/libgp.pc.in
-	${CMAKE_BINARY_DIR}/libgp.pc @ONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/contrib/libgp.pc.in
+	${CMAKE_CURRENT_BINARY_DIR}/libgp.pc @ONLY)
 
 # ----- Add example targets -----
 IF(BUILD_EXAMPLES)
