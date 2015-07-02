@@ -703,6 +703,7 @@ struct DataPointsFiltersImpl
 				( "zGroundVar", "Expected variance of the Z component of the ground points", "0.003", "0.0", "inf", &P::Comp<T> )
 				( "thModel", "Threshold on the model to decide if we proceed with the in/outlier determination", "0.2", "0.0", "inf", &P::Comp<T> )
 				( "thData", "Threshold on how close to the model a test point should be to be considered inlier. Value in standard deviations.", "3", "0.0", "inf", &P::Comp<T> )
+				( "numSec", "Number of sections to divide the point cloud. If 1 we consider all points in the same region", "1", "1", "360", P::Comp<unsigned> )
 				( "keepGround", "If 1 (true), we keep the points segmented as ground (aka inliers to the model). If false (0), we remove the ground points", "0", "0", "1", P::Comp<bool> )
 				( "keepObjects", "If 1 (true), we keep the points segmented as objects (aka outliers to the model). If false (0), we remove the object points", "1", "0", "1", P::Comp<bool> )
 				( "keepUnknown", "If 1 (true), we keep the points which the model was not certain about (aka cannot be classified as in/outliers). If false (0), we remove these points", "0", "0", "1", P::Comp<bool> )
@@ -717,9 +718,19 @@ struct DataPointsFiltersImpl
 		const T zGroundVar;
 		const T thModel;
 		const T thData;
+		const unsigned numSec;
 		const bool keepGround;
 		const bool keepObjects;
 		const bool keepUnknown;
+
+		struct Section {
+			std::vector<unsigned int> inliers;
+			std::vector<unsigned int> new_inliers;
+			std::vector<unsigned int> outliers;
+			std::vector<unsigned int> unknowns;
+
+			Section() {}
+		};
 
 		//! Constructor, uses parameter interface
 		SegmentGroundDataPointsFilter(const Parameters& params = Parameters());
