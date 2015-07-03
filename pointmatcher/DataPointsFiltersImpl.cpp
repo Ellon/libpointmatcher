@@ -1959,7 +1959,11 @@ void DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::inPlaceFilter(
 
 	// Step 2: run gp-insac on each section
 	for(unsigned int idx = 0; idx < numSec; idx++)
-    {
+	{
+		//TODO: See if we improve performance (classification or computation time)
+		//      by using a 1-D gaussian process with the input being the distance
+		//      in the x-y plane
+
 		// Define the gp object and set its parameters
 		libgp::GaussianProcess gp(2, "CovSum ( CovSEiso, CovNoise)");
 		Eigen::VectorXd params(gp.covf().get_param_dim());
@@ -1986,10 +1990,14 @@ void DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::inPlaceFilter(
 			//       loop to remove objects close to the robot that were
 			//       first considered as inliers.
 
+
 			// 2) Classify the test points into new_inliers, outliers or unknown
 			std::vector<unsigned int> test_points(sections[idx].unknowns);
-			test_points.insert(test_points.end(),sections[idx].outliers.begin(),sections[idx].outliers.end());
 			sections[idx].unknowns.clear();
+			// TODO: Maybe we don't really need to test again the points already
+			//       classified as objects. If that's the case we should not
+			//       execute the two next lines below
+			test_points.insert(test_points.end(),sections[idx].outliers.begin(),sections[idx].outliers.end());
 			sections[idx].outliers.clear();
 			for (std::vector<unsigned int>::iterator it = test_points.begin();
 				it != test_points.end(); it++ )
@@ -2022,7 +2030,7 @@ void DataPointsFiltersImpl<T>::SegmentGroundDataPointsFilter::inPlaceFilter(
 		}
 	}
 
-	// Srep 3: crop the cloud based on 'keep' flags
+	// Step 3: crop the cloud based on 'keepXxxx' flags
 	// Get indices of points to keep
     std::vector<unsigned int> pointsToKeep;
 	for(unsigned int idx = 0; idx < numSec; idx++)
